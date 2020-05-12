@@ -24,9 +24,6 @@ def ReadVoxs( path ):
 def SaveVoxs( path, voxs, palette ):
 
     dimz, dimy, dimx = voxs.shape
-    print('z', dimz)
-    print('y', dimy)
-    print('x', dimx)
 
     with open(path, "wb") as outfile:
         outfile.write((dimx).to_bytes(length=4, byteorder='little'))
