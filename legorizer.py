@@ -33,6 +33,7 @@ class Brick():
         self.h = h
         self.area = w*h
 
+
     def __str__(self):
         return "wide = {}, height = {}, area = {}".format(self.w, self.h, self.area)
 
@@ -41,6 +42,10 @@ class Brick():
     
     def __eq__(self, other):
         return self.w == other.w and self.h == other.h
+    
+    def GetBoundary(self, x, y):
+        ''' beginx endx beginy endy'''
+        return int( x - self.w/2 + 0.5 ), int( x + self.w/2 + 0.5 ), int( y - self.h/2 + 0.5 ), int( y + self.h/2 + 0.5 )
 
 class State():
 
@@ -50,16 +55,13 @@ class State():
         self.blueEdges = dict()
         self.sil = sil
         self.brickList = brickList
+        self.dimZ = sil.shape[0]
 
         self.currentZ = 0
         self.currentLayerSil = np.zeros(sil[0].shape, dtype=bool)
+        
+        self.MoveNextAvailLayer()
 
-        if not isCopy:
-            dimz, _, _ = sil.shape
-            for k in range(dimz-1,-1,-1):
-                if np.sum( sil[k] ) != 0:    
-                    self.topZ = k
-                    break
 
     def copy(self):
         s = State(self.sil, self.brickList, isCopy=True)
@@ -69,7 +71,6 @@ class State():
 
         s.currentZ = self.currentZ
         s.currentLayerSil = np.array(self.currentLayerSil)
-        s.topZ = self.topZ
         return s
 
     def __eq__(self, other):
@@ -93,11 +94,73 @@ class State():
                     return False
         
         return True
+        
+    def __hash__(self):
+        nodes = self.nodes
+        hashval = 0
+        for k in nodes:
+            hashval += int(k)*311 % 8000051
+            for j in nodes[k]:
+                hashval = (hashval + int(j)*313) % 7500071 + 113
+                for i in nodes[k][j]:
+                    hashval += (int(i)*317  + nodes[k][j][i].w*557 + nodes[k][j][i].h*563)
+        return hashval
     
-    def __
+    def __repr__(self):
+        z = self.currentZ
+        nodes = self.nodes
+
+        dimy, dimx = self.currentLayerSil.shape
+        VERPIPE = u'\u2551'
+        HORPIPE = u'\u2550'
+        printTable = [[" " for i in range(dimx)] for j in range(dimy)]
+
+        res = 'current layer: {}\n'.format(self.currentZ)
+
+        if z == self.dimZ:
+            z -= 1
+
+        if z not in self.nodes:
+            res += 'empty'
+            return res
+
+        for j in self.nodes[z]:
+            for i in self.nodes[z][j]:
+                brick = nodes[z][j][i]
+                beginx, endx, beginy, endy = brick.GetBoundary(i,j)
+                printTable[beginy][beginx]  = '#'
+                printTable[endy-1][beginx]  = '#'
+                printTable[beginy][endx-1]  = '#'
+                printTable[endy-1][endx-1]  = '#'
+                
+                if brick.w == 1:
+                    printTable[beginy][beginx] = 'u'
+                    printTable[endy-1][beginx] = 'n'
+                if brick.h == 1:
+                    printTable[beginy][beginx] = '('
+                    printTable[beginy][endx-1] = ')'
+                if brick.h == 1 and brick.w == 1:
+                    printTable[beginy][beginx] = '#'
+
+                for ix in range(beginx+1, endx-1):
+                    printTable[beginy][ix] = HORPIPE
+                    printTable[endy-1][ix] = HORPIPE
+                for jx in range(beginy+1, endy-1):
+                    printTable[jx][beginx] = VERPIPE
+                    printTable[jx][endx-1] = VERPIPE
+
+        
+        res += '-'*2*dimx + '\n'
+        for j in range(len(printTable)-1,-1,-1):
+            res += '|'
+            for e in printTable[j]:
+                res += e + '|'
+            res += '\n' + '-'*2*dimx + '\n'
+
+        return res
 
     def IsFinish(self):
-        return self.currentZ == self.topZ+1
+        return self.currentZ == self.dimZ
 
     def GetNextStates(self):
         '''O ( dimx * dimy * No brick * O( Add ) )'''
@@ -107,16 +170,23 @@ class State():
 
         for j in range(dimy):
             for i in range(dimx):
+
+                if not self.sil[z][j][i]:
+                    continue
+                if self.currentLayerSil[j][i]:
+                    continue
+
                 for brick in self.brickList:
+                    px = i
+                    py = j
+                    if brick.w % 2 == 0:
+                        px += 0.5
+                    if brick.h %2 == 0:
+                        py += 0.5
 
-                    if not self.sil[z][j][i]:
-                        continue
-                    if self.currentLayerSil[j][i]:
-                        continue
-
-                    if self.IsNewBrickValid(i,j,brick):
+                    if self.IsNewBrickValid(px,py,brick):
                         newState = self.copy()
-                        newState.AddBrick(i,j, brick)
+                        newState.AddBrick(px,py, brick)
 
                         nextStates.append(newState)
                         break
@@ -124,7 +194,7 @@ class State():
         return nextStates
 
     def CalHeuristic(self):
-        return random() #TODO
+        return 1/(self.currentZ * 400 + np.sum(self.currentLayerSil) +random() ) #TODO
 
     def _MoveNextLayer(self):
         self.currentLayerSil = np.zeros(self.sil[0].shape, dtype=bool)
@@ -139,12 +209,7 @@ class State():
             self.nodes[z][y] = dict()
 
         self.nodes[z][y][x] = brick
-
-        beginx  =   int( x - brick.w/2 + 0.5 )
-        endx    =   int( x + brick.w/2 + 0.5 )
-        beginy  =   int( y - brick.h/2 + 0.5 )
-        endy    =   int( y + brick.h/2 + 0.5 )
-
+        beginx, endx, beginy, endy = brick.GetBoundary(x,y)
         self.currentLayerSil[beginy:endy,beginx:endx] = True
 
     def IsNewBrickValid(self, x, y, newbrick):
@@ -152,10 +217,7 @@ class State():
         z = self.currentZ
         dimy,dimx = self.currentLayerSil.shape
 
-        beginx  =   int( x - newbrick.w/2 + 0.5 )
-        endx    =   int( x + newbrick.w/2 + 0.5 )
-        beginy  =   int( y - newbrick.h/2 + 0.5 )
-        endy    =   int( y + newbrick.h/2 + 0.5 )
+        beginx, endx, beginy, endy = newbrick.GetBoundary(x,y)
 
         if beginx < 0 or endx > dimx:
             return False
@@ -173,6 +235,16 @@ class State():
     def IsLayerFull(self):
         return np.sum( np.bitwise_xor(self.currentLayerSil, self.sil[self.currentZ] ) ) == 0
 
+    def MoveNextAvailLayer(self):
+
+        if (self.currentZ >= self.dimZ):
+            return
+
+        while self.IsLayerFull():
+            self._MoveNextLayer()
+            if (self.currentZ == self.dimZ):
+                break
+
     def AddBrick(self, x, y, brick):
         ''' O( IsNewBrickValid) '''
         z = self.currentZ
@@ -181,8 +253,7 @@ class State():
         # TODO set red, blue edges
         self._SetNode(x,y,z, brick)
 
-        if self.IsLayerFull():
-            self._MoveNextLayer()
+        self.MoveNextAvailLayer()
 
         return True
 
@@ -203,13 +274,20 @@ def Solve(sil, brickList):
     OPEN.append( (0, State(sil, brickList)) )
     while(True):
         current = heappop(OPEN)[1]
-        
-        states = current.GetNextStates()
-        print('consider at layer {}'.format(current.currentZ), current.nodes)
 
+        # maintain uniqueness at level 1 only
+        if (current.currentZ == 0):
+            CLOSED.add(current)
+
+        states = current.GetNextStates()
+        # print('consider at layer {}'.format(current.currentZ), current)
+        print('layer: {}, size heap: {}'.format(current.currentZ, len(OPEN)))
         for state in states:
+            if current.currentZ == 0 and state in CLOSED:
+                continue
+
             if state.IsFinish():
-                print('finish ', state.nodes)
+                print('finish ', state)
                 return state
             if state not in OPEN:
                 G = state.CalHeuristic()
@@ -227,15 +305,15 @@ if __name__ == '__main__':
 
     start = timeit.default_timer()
 
-    # voxs = ReadVoxs( VOX_IN_PATH )
-    # sil = voxs != 255
-    sil = np.zeros((5,5,5),dtype=bool)
-    sil[0,1:4,1:4] = True
-    sil[0,2:3,0] = True
+    voxs = ReadVoxs( VOX_IN_PATH )
+    sil = voxs != 255
+    # sil = np.zeros((5,5,5),dtype=bool)
+    # sil[0,1:4,1:4] = True
+    # sil[0,2:3,0] = True
 
     brickList = GetBrickList()
 
-    Solve(sil, brickList)
+    finstate = Solve(sil, brickList)
     # SaveVoxs( VOX_OUT_PATH, voxs, CreatePalette() )
 
     stop = timeit.default_timer()

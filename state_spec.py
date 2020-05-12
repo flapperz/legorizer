@@ -77,5 +77,6 @@ for s in state.GetNextStates():
     print(s.nodes)
     print(s.currentLayerSil)
 
-print( 'memory use {} bytes'.format(process.memory_info().rss) )  # in bytes 
+state = State(sil, brickList)
 
+print( 'memory use {} bytes'.format(process.memory_info().rss) )  # in bytes 
