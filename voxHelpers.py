@@ -1,3 +1,5 @@
+import numpy as np 
+
 def ReadVoxs( path ):
     
     with open(path, 'rb') as voxfile:
@@ -34,10 +36,7 @@ def SaveVoxs( path, voxs, palette ):
         for i in range(dimx-1, -1, -1):
             for j in range(dimy):
                 for k in range(dimz-1, -1, -1):
-                    if (k<20):
-                        outfile.write( int( voxs[k][j][i] ).to_bytes(length=1, byteorder='little') )
-                    else:
-                        outfile.write( int( 255 ).to_bytes(length=1, byteorder='little') )
+                    outfile.write( int( voxs[k][j][i] ).to_bytes(length=1, byteorder='little') )
 
         for col in palette:
             for val in col:

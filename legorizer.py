@@ -4,6 +4,8 @@ from queue import PriorityQueue
 from heapq import heappush, heappop
 from voxHelpers import *
 
+from random import random
+
 import logging
 
 
@@ -37,11 +39,25 @@ class State():
         self.blueEdges = dict()
         self.voxs = voxs
 
-        self.tillingLayer = np.ndarray(voxs[0], dtype=object)
-        self.tillingLayer = (tillingLayer != Vox.EMPTY).fill 
+        self.tillingLayer = np.zeros(voxs[0].shape, dtype=bool)
+
+    def __eq__(self, other):
+
+        def hash( state ):
+            nodes = state.nodes
+            hashval = 0
+            for k in nodes:
+                hashval += k*311 % 8000051
+                for j in nodes[k]:
+                    hashval = (hashval + j*313) % 7500071 + 113
+                    for i in nodes[k][j]:
+                        hashval += i*317
+            return hashval
+
+
+        return hash(self) == hash(other)
 
     def AddNode(self, x, y, z, brick):
-
         if z not in self.nodes:
             self.nodes[z] = dict()
 
@@ -49,6 +65,12 @@ class State():
             self.nodes[z][y] = dict()
 
         self.nodes[z][y][x] = brick
+
+    def GetNextStates(self):
+        return [State(voxs)] #TODO
+
+    def CalHeuristic(self):
+        return random() #TODO
 
 def GetBrickList():
     # TODO LOAD BRICK
@@ -68,7 +90,7 @@ def Solve(voxs, brickList):
     while(True):
         current = heappop(OPEN)
 
-        # states = GetNextStates(current)
+        states = current.GetNextStates()
 
         for state in states:
             if not state.valid:
@@ -78,7 +100,7 @@ def Solve(voxs, brickList):
                 return state
 
             if state not in OPEN:
-                # G = CalHeuristic(state)
+                G = state.CalHeuristic()
                 G = 0
                 heappush(OPEN, (G, state) )
 
@@ -97,6 +119,7 @@ def Solve(voxs, brickList):
 if __name__ == '__main__':
 
     voxs = ReadVoxs( VOX_IN_PATH )
+    voxs = voxs != 255
     brickList = GetBrickList()
 
     # Solve(voxs, brickList)
