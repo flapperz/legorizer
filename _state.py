@@ -94,6 +94,11 @@ class State():
         # global reference
         self.sil = sil
         self.brickList = brickList
+        if not isCopy:
+            areaList = [b.area for b in brickList]
+            self.maxBrick = max(areaList)
+            self.minBrick = min(areaList)
+            self.slotno = np.sum(self.sil)
         
         # field
         self.nodes = dict()
@@ -111,11 +116,18 @@ class State():
         # Heuristic
         self.GS = 0
         self.gsEachBlueEdges = dict() #idx-gs
+        self.currentLayerGH = 0
+        self.GH = 0
+        self.GA = 0
 
         self.MoveNextAvailLayer()
 
     def copy(self):
         s = State(self.sil, self.brickList, isCopy=True)
+
+        s.maxBrick = self.maxBrick
+        s.minBrick = self.minBrick
+
         s.nodes = deepcopy(self.nodes)
         s.blueEdges = deepcopy(self.blueEdges)
         s.uncoveredBlueEdges = deepcopy(self.uncoveredBlueEdges)
@@ -125,8 +137,12 @@ class State():
         s.currentZ = self.currentZ
         s.currentLayerSil = np.array(self.currentLayerSil)
 
+        s.slotno = self.slotno
+
         s.GS = self.GS
         s.gsEachBlueEdges = deepcopy(self.gsEachBlueEdges)
+        s.GH = self.GH
+        s.GA = self.GA
         return s
 
     def __eq__(self, other):
@@ -154,8 +170,15 @@ class State():
     def __ge__(self, other):
         return self.currentZ < other.currentZ
     
+    def CountBrick(self):
+        res = 0
+        for k in self.nodes:
+            for j in self.nodes[k]:
+                res += len(self.nodes[k][j])
+        return res
+
     def __lt__(self, other):
-        return self.currentZ >= other.currentZ
+        return self.CountBrick() > other.CountBrick()
 
     def __hash__(self):
         nodes = self.nodes
@@ -331,14 +354,6 @@ class State():
 
         return nextStates
 
-    def addGS(self, coordG, brick):
-        pass
-
-    def CalHeuristic(self):
-        
-        return self.GS
-        # return 1/(self.currentZ * 400 + np.sum(self.currentLayerSil) + random() ) #TODO
-
     ### EDGE
 
     ### NODE
@@ -406,6 +421,8 @@ class State():
         ''' O( IsNewBrickValid) '''
         z = self.currentZ
         self._SetNode(x,y,z, brick)
+        # self.currentLayerGH = self.CalNewBrickGH()
+        # self.GA += brick.area/self.slotno
 
         self.MoveNextAvailLayer()
 
@@ -496,6 +513,32 @@ class State():
         
         return res
 
+    def CalHeuristic(self):
+        
+        return self.GS - self.currentZ
+        # return self.GS + self.GH + self.currentLayerGH
+        return self.GS + self.GH + self.currentLayerGH - self.GA
+        # return self.GS + self.currentLayerGH
+
+    def CalNewBrickGH(self):
+        z = self.currentZ
+        slotno = np.sum(self.sil[z])
+        assignno = 0
+        brickCount = 0
+        nodes = self.nodes
+        if z in nodes:
+            for j in nodes[z]:
+                for i in nodes[z][j]:
+                    assignno += nodes[z][j][i].area
+                    brickCount += 1
+
+        notassignslot = slotno - assignno
+
+        n = notassignslot + brickCount
+        return (n*self.maxBrick - slotno)/(n* (self.maxBrick-self.minBrick) )
+        
+        
+        # return (brickCount*self.maxBrick - assignno) / (brickCount *(self.maxBrick-self.minBrick) )
 
         
 
@@ -505,7 +548,6 @@ class State():
         return np.sum( np.bitwise_xor(self.currentLayerSil, self.sil[self.currentZ] ) ) == 0
 
     def _MoveNextLayer(self):
-        tim_start = timeit.default_timer()
 
         self.currentLayerSil = np.zeros(self.sil[0].shape, dtype=bool)
         self.currentZ += 1
@@ -526,17 +568,14 @@ class State():
         if delLayer in self.blueEdges:
             del self.blueEdges[delLayer]
         
-        # print( "blue edge of z = {}".format(self.currentZ))
+        # print( "z = {}".format(self.currentZ))
         # print( self.blueEdges)
 
-        tim_stopMove = timeit.default_timer()
         # self.uncoveredBlueEdges = dict()
         self.AssignPrevLayerUncoveredBlueEdges(prevLayerBlueEdges, prevLayer)
         self.GS += self.CalNewLayerGS()
-        tim_stopPath = timeit.default_timer()
-
-        # print("timer move and other: ", tim_stopMove-tim_start)
-        # print("timer cal REDIST", tim_stopPath-tim_stopMove)
+        self.GH += self.currentLayerGH
+        self.currentLayerGH = 0
 
     def MoveNextAvailLayer(self):
 

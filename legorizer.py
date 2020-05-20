@@ -4,6 +4,7 @@ from copy import deepcopy
 import os
 import psutil
 import timeit
+import config
 from _brick import *
 from _state import *
 from _vox import *
@@ -13,23 +14,13 @@ import logging
 
 
 # constants && enums
-VOX_IN_PATH = './voxin/out.slab.vox'
+VOX_IN_PATH = './voxin/out30.vox'
 VOX_OUT_PATH = './legorized.vox'
+VOX_OUT_SPLIT_PATH = './legorized.split.vox'
     
-
-# class Vox():
-#     VOXSURF_EMPTY = 255
-#     VOXSURF_SHELL = 127
-#     VOXSURF_INSIDE = 123
-
-#     EMPTY = 255
-#     SHELL = 127
-#     INSIDE = 123
-
 def GetBrickList():
-    # TODO LOAD BRICK
-    originalBrickList = [(1,1), (1,2), (1,3), (2,2), (2,4), (2,6), (2,3), (2,8)]
-    originalBrickList = [(1,1), (1,2), (1,3)]
+    originalBrickList = config.brickList
+    # originalBrickList = [(1,1), (1,2), (1,3)]
     brickList = [ Brick(x[0],x[1]) for x in originalBrickList ] + [ Brick(x[1],x[0]) for x in originalBrickList ]
 
     return sorted( list( set( brickList )), key=lambda b: b.area, reverse=True )
@@ -43,16 +34,17 @@ def Solve(sil, brickList):
     
     OPEN.append( (0, State(sil, brickList)) )
     while(True):
-        current = heappop(OPEN)[1]
-
+        oldG, current = heappop(OPEN)
+        
         # maintain uniqueness at level 1 only
         # if (current.currentZ == 0):
         CLOSED.add(current)
 
         states = current.GetNextStates()
         # print('consider at layer {}'.format(current.currentZ), current)
-        print('layer: {}, size heap: {}, gs: {}'.format(current.currentZ, len(OPEN), current.GS))
-        print(current)
+        print('layer: {}, size heap: {}, G: {}'.format(current.currentZ, len(OPEN), oldG))
+        # print('layer: {}, G: {:.2f}, GS: {:.2f} + GH: {:.2f} + GHCUR: {:.2f}'.format(current.currentZ, oldG, current.GS, current.GH, current.currentLayerGH))
+        # print(current)
         # current.PrintSchematic()
         for state in states:
             if state in CLOSED:
@@ -80,9 +72,13 @@ def printNodes(state):
 
 if __name__ == '__main__':
 
+    print( 'start reading vox')
     start = timeit.default_timer()
-
     voxs = ReadVoxs( VOX_IN_PATH )
+    stop = timeit.default_timer()
+    print( 'finish reading vox:', stop-start )
+
+    start = timeit.default_timer()
     # testVoxs
     # voxs = np.array( 
     #     [
@@ -91,13 +87,10 @@ if __name__ == '__main__':
     #         [[127, 127, 127], [127, 127, 127], [127, 127, 127]]
     #     ]
     # )
-    voxs = np.array( 
-        [
-            [[127, 127, 127], [127, 127, 127], [127, 127, 127]],
-            [[127, 127, 127], [127, 127, 127], [127, 127, 127]],
-            [[127, 127, 127], [127, 127, 127], [127, 127, 127]]
-        ]
-    )
+    # voxs = np.full((4,4,4), 127, dtype=int)
+    # voxs = np.array( 
+    #     [
+    #         [[127, 127, 127], [127, 127, 127], [127, 127, 127]]])
     sil = voxs != 255
     # sil = np.zeros((5,5,5),dtype=bool)
     # sil[0,1:4,1:4] = True
@@ -106,9 +99,11 @@ if __name__ == '__main__':
     brickList = GetBrickList()
 
     finstate = Solve(sil, brickList)
-    # SaveVoxs( VOX_OUT_PATH, voxs, CreatePalette() )
-
     stop = timeit.default_timer()
-    process = psutil.Process(os.getpid())
-    print( 'memory use {} bytes'.format(process.memory_info().rss) )  # in bytes 
     print( 'execution time {}'.format(stop-start))
+
+    print( 'start saving vox')
+    start = timeit.default_timer()
+    SaveVoxs( VOX_OUT_PATH, VOX_OUT_SPLIT_PATH, voxs.shape, finstate.nodes, CreatePalette() )
+    stop = timeit.default_timer()
+    print( 'finsih saving vox:', stop-start )
