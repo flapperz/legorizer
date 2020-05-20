@@ -1,4 +1,5 @@
 import numpy as np 
+from random import randint
 
 def ReadVoxs( path ):
     
@@ -41,9 +42,11 @@ def SaveVoxs( path, voxs, palette ):
 
 def CreatePalette():
     palette = np.zeros((256,3), dtype=int)
-    palette[123][:] = (127, 0, 127)
-    palette[124][:] = (255, 0, 0)
-    palette[125][:] = (0, 255, 0)
-    palette[126][:] = (0, 0, 255)
-    palette[127][:] = (255, 255, 255)
+    # palette[123][:] = (127, 0, 127)
+    # palette[124][:] = (255, 0, 0)
+    # palette[125][:] = (0, 255, 0)
+    # palette[126][:] = (0, 0, 255)
+    # palette[127][:] = (255, 255, 255)
+    for i in range(255):
+        palette[i][:] = (randint(0,255),randint(0,255),randint(0,255))
     return palette

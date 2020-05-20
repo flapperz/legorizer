@@ -6,8 +6,7 @@ import psutil
 import timeit
 from _brick import *
 from _state import *
-
-from voxHelpers import *
+from _vox import *
 
 from random import random
 import logging
@@ -18,14 +17,14 @@ VOX_IN_PATH = './voxin/out.slab.vox'
 VOX_OUT_PATH = './legorized.vox'
     
 
-class Vox():
-    VOXSURF_EMPTY = 255
-    VOXSURF_SHELL = 127
-    VOXSURF_INSIDE = 123
+# class Vox():
+#     VOXSURF_EMPTY = 255
+#     VOXSURF_SHELL = 127
+#     VOXSURF_INSIDE = 123
 
-    EMPTY = 255
-    SHELL = 127
-    INSIDE = 123
+#     EMPTY = 255
+#     SHELL = 127
+#     INSIDE = 123
 
 def GetBrickList():
     # TODO LOAD BRICK
@@ -64,7 +63,7 @@ def Solve(sil, brickList):
                 heappush(OPEN, (G, state) )
 
         if not len(OPEN):
-            break
+            break 
 
     soln = np.zeros((dimz, dimy, dimx), dtype=int)
     return soln
@@ -76,6 +75,14 @@ if __name__ == '__main__':
     start = timeit.default_timer()
 
     voxs = ReadVoxs( VOX_IN_PATH )
+    # testVoxs
+    voxs = np.array( 
+        [
+            [[127, 127, 127], [255,127,255], [127,127,255]],
+            [[0,0,0], [0,127,0], [0,0,0]],
+            [[127, 127, 127], [127, 127, 127], [127, 127, 127]]
+        ]
+    )
     sil = voxs != 255
     # sil = np.zeros((5,5,5),dtype=bool)
     # sil[0,1:4,1:4] = True

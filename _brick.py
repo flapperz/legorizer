@@ -14,5 +14,5 @@ class Brick():
         return self.w == other.w and self.h == other.h
     
     def GetBoundary(self, x, y):
-        ''' beginx endx beginy endy'''
+        ''' beginx, endx, beginy, endy'''
         return int( x - self.w/2 + 0.5 ), int( x + self.w/2 + 0.5 ), int( y - self.h/2 + 0.5 ), int( y + self.h/2 + 0.5 )

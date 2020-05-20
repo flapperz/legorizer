@@ -4,6 +4,96 @@ from _brick import *
 
 from random import random
 
+
+def CheckBrickTouch(brick1, x1, y1, brick2, x2, y2):
+    beginx1, endx1, beginy1, endy1 = brick1.GetBoundary(x1, y1)
+    beginx2, endx2, beginy2, endy2 = brick2.GetBoundary(x2, y2)
+
+    hTouch = (beginx1 == endx2) or (beginx2 == endx1)
+    vTouch = (beginy1 == endy1) or (beginy2 == endy1)
+    return (hTouch and not vTouch ) or (not hTouch and vTouch)
+
+
+
+def CheckBrickConnect(bricku, xu, yu, brickd, xd, yd):
+    beginxu, endxu, beginyu, endyu = bricku.GetBoundary(xu, yu)
+    beginxd, endxd, beginyd, endyd = brickd.GetBoundary(xd, yd)
+    
+    if beginxu >= endxd or endxu-1 < beginxd:
+        return False
+    
+    if beginyu >= endyd or endyu-1 < beginyd:
+        return False
+
+    return True
+
+def Dist(coord1, coord2):
+    dist = (coord1[0]-coord2[0], coord1[1]-coord2[1], coord1[2]-coord2[2])
+    return (dist[0]**2 + dist[1]**2 + dist[2]**2)**0.5
+    # return int(dist[0] + dist[1] + dist[2])
+
+
+'''
+brick coordinate
+
+(-.5,-.5)---(0,-.5)---(.5,-.5)---(1,-.5)---(xxxxxx) . .
+    |                    |                     |
+    |                    |                     |
+(-.5, 0  )---(0, 0)---(.5, 0)----(1, 0)----(xxxxxx) . .
+    |                    |                     |
+    .                    .                     .
+    . . . .          . . . . .             . . . . . .
+    .                    .                     .
+
+    leftmost: -0.5 (impossible position)
+
+    fraction .5 when length of brick is even -> [ O | O ]
+                                              -.5  .5   1.5
+                                                    ^
+
+                                                [ O | O | O ]
+                                                  0   1   2
+                                                      ^
+
+Red Edges
+---------
+
+    distance matrix
+     + + +  (1,1,1) (1,2,2) (2,3,4) (x,y,z)
+    (1,1,1)        |       |       |
+    (1,2,2)        |       |       |
+    (2,3,4)        |       |       |
+    (x,y,z)        |       |       |
+
+    RedEdgesLabel = [(1,1,1), (1,2,2), (2,3,4)]
+
+    newRedEdges = dict {
+        (coord1) : [(coord2, dist), ...]
+            .
+            .
+            .
+    }
+
+Red Edges Redesign
+------------------
+
+Blue Edges
+----------
+
+    list of list of tuple 
+    idx - z
+    [
+    idx:0 -> [((2,3),(3,4)), ((1,1),(2,3))]
+    idx:1 -> [((1,1),(1,3)), ((x1,y1),(x2,y2))]  
+        .
+        .
+    ]
+
+'''
+
+
+
+
 class State():
 
     def __init__(self, sil, brickList, isCopy=False):
@@ -13,8 +103,12 @@ class State():
         
         # field
         self.nodes = dict()
-        self.redEdges = dict()
-        self.blueEdges = dict()
+        self.redEdges = np.zeros((0,0), dtype=float)
+        self.redEdgesLabel = []
+        self.newRedEdges = dict()
+
+        self.blueEdges = [[]]
+
         self.dimZ = sil.shape[0]
 
         self.currentZ = 0
@@ -25,8 +119,10 @@ class State():
     def copy(self):
         s = State(self.sil, self.brickList, isCopy=True)
         s.nodes = deepcopy(self.nodes)
-        s.redEdge = deepcopy(self.redEdges)
         s.blueEdges = deepcopy(self.blueEdges)
+        s.redEdges = deepcopy(self.redEdges)
+        s.redEdgesLabel = deepcopy(self.redEdgesLabel)
+        s.newRedEdges = deepcopy(self.newRedEdges)
 
         s.currentZ = self.currentZ
         s.currentLayerSil = np.array(self.currentLayerSil)
@@ -143,9 +239,15 @@ class State():
                     if brick.h %2 == 0:
                         py += 0.5
 
-                    if self.IsNewBrickValid(px,py,brick):
+                    isValid, checkBlueEdges, checkRedEdges = self.CheckNewBrick(px,py,brick)
+                    if isValid:
                         newState = self.copy()
-                        newState.AddBrick(px,py, brick)
+                        newState.AddBrickNoCheck(px,py,brick)
+                        
+                        # update blue and red edges
+                        newState.blueEdges += checkBlueEdges
+                        newState.newRedEdges[(px,py,z)] = []
+                        newState.AddNewRedEdges(checkRedEdges)
 
                         nextStates.append(newState)
                         break
@@ -153,9 +255,27 @@ class State():
         return nextStates
 
     def CalHeuristic(self):
-        return 1/(self.currentZ * 400 + np.sum(self.currentLayerSil) +random() ) #TODO
+        return 1/(self.currentZ * 400 + np.sum(self.currentLayerSil) + random() ) #TODO
 
-    
+    ### EDGE
+    def calNewShortestPath(self):
+        # floyd warshall
+        V, _ = self.redEdges.shape
+        for k in range(V):
+            for i in range(V):
+                for j in range(V): 
+                    self.redEdges[i][j] = min(self.redEdges[i][j],
+                                            self.redEdges[i][k], self.redEdges[k][j])
+        print(self.redEdges) #TODO delete
+        print(self.redEdgesLabel)
+
+    def AddNewRedEdges(self, checkRedEdges):
+        ''' add checkRedEdges from checkNewBrick '''
+        for (coord1, coord2) in checkRedEdges:
+            if coord1 not in self.newRedEdges:
+                self.newRedEdges[coord1] = []
+            self.newRedEdges[coord1].append((coord2, Dist(coord1, coord2)))
+
     ### NODE
 
     def _SetNode(self, x, y, z, brick):
@@ -170,32 +290,56 @@ class State():
         beginx, endx, beginy, endy = brick.GetBoundary(x,y)
         self.currentLayerSil[beginy:endy,beginx:endx] = True
 
-    def IsNewBrickValid(self, x, y, newbrick):
-
+    def CheckNewBrick(self, x, y, newbrick):
+        ''' return isValid, blueEdges, redEdges '''
         z = self.currentZ
         dimy,dimx = self.currentLayerSil.shape
-
         beginx, endx, beginy, endy = newbrick.GetBoundary(x,y)
 
         if beginx < 0 or endx > dimx:
-            return False
+            return False, [], []
         if beginy < 0 or endy > dimy:
-            return False
+            return False, [], [] 
 
+        curZ = self.currentZ
+
+        blueEdges = []
+        redEdges = []
+
+        # Check in silhoullet and not overlap
         for i in range(beginx, endx):
             for j in range(beginy, endy):
                 if not self.sil[z][j][i]:
-                    return False
+                    return False, [], []
                 if self.currentLayerSil[j][i]:
-                    return False
-        return True
+                    return False, [], []
 
-    def AddBrick(self, x, y, brick):
+
+        # blueEdges
+        if curZ in self.nodes:
+            for j in self.nodes[curZ]:
+                for i in self.nodes[curZ][j]:
+                    otherBrick = self.nodes[curZ][j][i]
+                    isTouch = CheckBrickTouch(newbrick, x, y, otherBrick, i, j)
+                    if isTouch:
+                        blueEdges.append( ((x,y,curZ), (i,j,curZ)) )
+
+        # redEdges
+        prevZ = curZ - 1
+        if prevZ in self.nodes:
+            for j in self.nodes[prevZ]:
+                for i in self.nodes[prevZ][j]:
+                    otherBrick = self.nodes[prevZ][j][i]
+                    isConnect = CheckBrickConnect(newbrick, x, y, otherBrick, i, j)
+                    if isConnect:
+                        redEdges.append( ((x,y,curZ), (i,j,prevZ)) )
+
+
+        return True, blueEdges, redEdges 
+
+    def AddBrickNoCheck(self, x, y, brick):
         ''' O( IsNewBrickValid) '''
         z = self.currentZ
-        # if not self.IsNewBrickValid(x,y, brick):
-        #     return False
-        # TODO set red, blue edges
         self._SetNode(x,y,z, brick)
 
         self.MoveNextAvailLayer()
@@ -203,27 +347,6 @@ class State():
         return True
 
     ### BLUE EDGE
-    def AddBlueEdgesForNodes(self, nodecoord):
-        nx, ny, nz = nodecoord
-        brick = self.nodes[nz][ny][nx]
-        
-        for j in self.nodes[nz]:
-            for i in self.nodes[nz][j]:
-                # if IsBrickAdjacent
-                pass
-
-        # self._AddOneDirEdge()
-        # self._AddOneDirEdge
-
-    def _AddOneDirEdge(self, coord1, coord2 ):
-
-        x, y, z = coord1
-        if z not in self.blueEdges:
-            self.blueEdges[z] = dict()
-        if y not in self.nodes[z]:
-            self.blueEdges[z][y] = dict()
-
-        self.blueEdges[z][y][x] = coord2 
 
 
     ### LAYER
@@ -234,6 +357,32 @@ class State():
     def _MoveNextLayer(self):
         self.currentLayerSil = np.zeros(self.sil[0].shape, dtype=bool)
         self.currentZ += 1
+
+        self.blueEdges.append([])
+
+        # update red edge
+        nOld, _ = self.redEdges.shape
+        nNew = len(self.newRedEdges)
+        oldRedEdges = self.redEdges
+
+        # recalculate red edge
+        self.redEdges = np.full((nOld+nNew, nOld+nNew), 9999, dtype=float)
+        self.redEdges[0:nOld, 0:nOld] = oldRedEdges
+        self.redEdgesLabel += self.newRedEdges.keys()
+        for coord, vList in self.newRedEdges.items():
+            for v in vList:
+                coord2 = v[0]
+                dist = v[1]
+                
+                idx = self.redEdgesLabel.index(coord)
+                idx2 = self.redEdgesLabel.index(coord2)
+
+                self.redEdges[idx, idx2] = dist
+                self.redEdges[idx2, idx] = dist
+
+        self.newRedEdges = dict()
+
+        self.calNewShortestPath()
 
     def MoveNextAvailLayer(self):
 
