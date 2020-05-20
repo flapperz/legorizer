@@ -12,6 +12,9 @@ class Brick():
     
     def __str__(self):
         return "Brick {}x{}".format(self.w, self.h)
+
+    def __hash__(self):
+        return self.w*1077 + self.h*1000001
     
     def __eq__(self, other):
         return self.w == other.w and self.h == other.h

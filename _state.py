@@ -11,7 +11,7 @@ def CheckBrickTouch(brick1, x1, y1, brick2, x2, y2):
     beginx2, endx2, beginy2, endy2 = brick2.GetBoundary(x2, y2)
 
     hTouch = (beginx1 == endx2) or (beginx2 == endx1)
-    vTouch = (beginy1 == endy1) or (beginy2 == endy1)
+    vTouch = (beginy1 == endy2) or (beginy2 == endy1)
     return (hTouch and not vTouch ) or (not hTouch and vTouch)
 
 
@@ -58,21 +58,8 @@ brick coordinate
 
 Red Edges
 ---------
-
-    distance matrix
-     + + +  (1,1,1) (1,2,2) (2,3,4) (x,y,z)
-    (1,1,1)        |       |       |
-    (1,2,2)        |       |       |
-    (2,3,4)        |       |       |
-    (x,y,z)        |       |       |
-
-    RedEdgesLabel = [(1,1,1), (1,2,2), (2,3,4)]
-
-    newRedEdges = dict {
-        (coord1) : [(coord2, dist), ...]
-            .
-            .
-            .
+    dict {
+        (coord) : [ (lower coord1), (lower coord2), ... ]
     }
 
 Blue Edges
@@ -85,6 +72,15 @@ Blue Edges
     idx:1 -> [((1,1),(1,3)), ((x1,y1),(x2,y2))]  
         .
         .
+    }
+
+Uncovered Blue Edges
+--------------------
+    {
+        <index in blue edges list> : redEdgeDist
+                    .
+                    .
+                    .
     }
 
 '''
@@ -101,17 +97,20 @@ class State():
         
         # field
         self.nodes = dict()
-        self.redEdges = np.zeros((0,0), dtype=float)
-        self.redEdgesLabel = dict()
-        self.newRedEdges = dict()
 
         self.blueEdges = { 0: [] }
-        self.uncoveredBlueEdges = []
+        self.uncoveredBlueEdges = dict()
+
+        self.redEdges = dict()
 
         self.dimZ = sil.shape[0]
 
         self.currentZ = 0
         self.currentLayerSil = np.zeros(sil[0].shape, dtype=bool)
+
+        # Heuristic
+        self.GS = 0
+        self.gsEachBlueEdges = dict() #idx-gs
 
         self.MoveNextAvailLayer()
 
@@ -119,12 +118,15 @@ class State():
         s = State(self.sil, self.brickList, isCopy=True)
         s.nodes = deepcopy(self.nodes)
         s.blueEdges = deepcopy(self.blueEdges)
+        s.uncoveredBlueEdges = deepcopy(self.uncoveredBlueEdges)
+        
         s.redEdges = deepcopy(self.redEdges)
-        s.redEdgesLabel = deepcopy(self.redEdgesLabel)
-        s.newRedEdges = deepcopy(self.newRedEdges)
 
         s.currentZ = self.currentZ
         s.currentLayerSil = np.array(self.currentLayerSil)
+
+        s.GS = self.GS
+        s.gsEachBlueEdges = deepcopy(self.gsEachBlueEdges)
         return s
 
     def __eq__(self, other):
@@ -148,7 +150,13 @@ class State():
                     return False
         
         return True
-        
+    
+    def __ge__(self, other):
+        return self.currentZ < other.currentZ
+    
+    def __lt__(self, other):
+        return self.currentZ >= other.currentZ
+
     def __hash__(self):
         nodes = self.nodes
         hashval = 0
@@ -213,6 +221,61 @@ class State():
 
         return res
 
+    def PrintSchematic(self):
+        maxz = self.currentZ
+        nodes = self.nodes
+
+        dimy, dimx = self.currentLayerSil.shape
+        VERPIPE = u'\u2551'
+        HORPIPE = u'\u2550'
+        print("schematic till present")
+        
+        for z in range(maxz+1):
+            printTable = [[" " for i in range(dimx)] for j in range(dimy)]
+            res = 'layer: {}\n'.format(z)
+
+            if z == self.dimZ:
+                z -= 1
+
+            if z not in self.nodes:
+                res += 'empty'
+                return res
+
+            for j in self.nodes[z]:
+                for i in self.nodes[z][j]:
+                    brick = nodes[z][j][i]
+                    beginx, endx, beginy, endy = brick.GetBoundary(i,j)
+                    printTable[beginy][beginx]  = '#'
+                    printTable[endy-1][beginx]  = '#'
+                    printTable[beginy][endx-1]  = '#'
+                    printTable[endy-1][endx-1]  = '#'
+                    
+                    if brick.w == 1:
+                        printTable[beginy][beginx] = 'u'
+                        printTable[endy-1][beginx] = 'n'
+                    if brick.h == 1:
+                        printTable[beginy][beginx] = '('
+                        printTable[beginy][endx-1] = ')'
+                    if brick.h == 1 and brick.w == 1:
+                        printTable[beginy][beginx] = '#'
+
+                    for ix in range(beginx+1, endx-1):
+                        printTable[beginy][ix] = HORPIPE
+                        printTable[endy-1][ix] = HORPIPE
+                    for jx in range(beginy+1, endy-1):
+                        printTable[jx][beginx] = VERPIPE
+                        printTable[jx][endx-1] = VERPIPE
+
+            
+            res += '-'*2*dimx + '\n'
+            for j in range(len(printTable)-1,-1,-1):
+                res += '|'
+                for e in printTable[j]:
+                    res += e + '|'
+                res += '\n' + '-'*2*dimx + '\n'
+            print(res)
+        print("################")
+
     def IsFinish(self):
         return self.currentZ == self.dimZ
 
@@ -242,13 +305,26 @@ class State():
 
                     if isValid:
                         newState = self.copy()
-                        newState.AddBrickNoCheck(px,py,brick)
-                        
-                        # update blue and red edges
+                        # update blue edges
                         newState.blueEdges[z] += checkBlueEdges
-                        newState.newRedEdges[(px,py,z)] = []
-                        newState.AddNewRedEdges(checkRedEdges)
-                        # newState.addGS((px,py,z), brick)
+
+                        # update red edges
+                        topVert = (px,py,z)
+                        newState.redEdges[topVert] = []
+                        if checkRedEdges:
+                            newState.redEdges[topVert] = [pair[1] for pair in checkRedEdges]
+
+                        # update GS
+                        
+                        if z-1 in self.blueEdges:
+                            covereds = [pair[1] for pair in checkRedEdges]
+                            for idx, edges in enumerate(self.blueEdges[z-1]):
+                                if edges[0] in covereds and edges[1] in covereds:
+                                    # print("idx = {}, gsEach = {}".format(idx, self.gsEachBlueEdges))
+                                    gsi = self.gsEachBlueEdges.pop(idx,0)
+                                    self.GS -= gsi
+
+                        newState.AddBrickNoCheck(px,py,brick) # may move next state here
 
                         nextStates.append(newState)
                         break
@@ -260,31 +336,10 @@ class State():
 
     def CalHeuristic(self):
         
-        
-        return 1/(self.currentZ * 400 + np.sum(self.currentLayerSil) + random() ) #TODO
+        return self.GS
+        # return 1/(self.currentZ * 400 + np.sum(self.currentLayerSil) + random() ) #TODO
 
     ### EDGE
-    def calNewShortestPath(self):
-        # floyd warshall
-        V, _ = self.redEdges.shape
-        for k in range(V):
-            for i in range(V):
-                distki = self.redEdges[k][i] if (k<i) else self.redEdges[i][k] 
-                if (k==i or distki==np.Inf):
-                    continue
-                for j in range(i+1, V): 
-                    distkj = self.redEdges[k][j] if (k<j) else self.redEdges[j][k] 
-                    if (k==j or i==j or distkj==np.Inf):
-                        continue
-                    self.redEdges[i][j] = min(self.redEdges[i][j],
-                                            distki + distkj)
-
-    def AddNewRedEdges(self, checkRedEdges):
-        ''' add checkRedEdges from checkNewBrick '''
-        for coord1, coord2 in checkRedEdges:
-            # if coord1 not in self.newRedEdges:
-            #     self.newRedEdges[coord1] = []
-            self.newRedEdges[coord1].append((coord2, Dist(coord1, coord2)))
 
     ### NODE
 
@@ -357,7 +412,92 @@ class State():
         return True
 
     ### BLUE EDGE
+    def AssignPrevLayerUncoveredBlueEdges(self, prevLayerBlueEdges, z):
+        '''
+        calCache
+        --------
 
+            {
+                coord : {
+                    z1 : set {<child coord1>, <child coord2>, ...}
+                    .
+                    .
+                }
+            }
+        '''
+        calCache = dict()
+        
+        
+    
+        for idx in range(len(prevLayerBlueEdges)):
+            coord1, coord2 = prevLayerBlueEdges[idx]
+
+            # pre register
+            if coord1 not in calCache:
+                calCache[coord1] = {
+                    z-1: set(self.redEdges[ coord1 ])
+                }
+            if coord2 not in calCache:
+                calCache[coord2] = {
+                    z-1: set(self.redEdges[ coord2 ])
+                }
+
+            considerZ = z-1
+            # first set to infinity
+            self.uncoveredBlueEdges[idx] = np.Inf
+            # consider each layer
+            while considerZ >= 0:
+
+                if considerZ not in calCache[coord1]:
+                    calCache[coord1][considerZ] = set()
+                    for upperChild in calCache[coord1][considerZ+1]:
+                        calCache[coord1][considerZ].update( set( self.redEdges[upperChild] ) )
+                thisLayerChild1 = calCache[coord1][considerZ]
+
+                if considerZ not in calCache[coord2]:
+                    calCache[coord2][considerZ] = set()
+                    for upperChild in calCache[coord2][considerZ+1]:
+                        calCache[coord2][considerZ].update( set( self.redEdges[upperChild] ) )
+                thisLayerChild2 = calCache[coord2][considerZ]
+
+                # if (considerZ == 3):
+                #     print( "cal cache", calCache )
+                # if len(thisLayerChild1.intersection(thisLayerChild2)):
+                if thisLayerChild1.intersection(thisLayerChild2):
+                    self.uncoveredBlueEdges[idx] = z-considerZ
+                    break
+
+                considerZ -= 1
+                      
+    ### HEURISTIC
+    def CalNewLayerGS(self):
+        self.gsEachBlueEdges = dict()
+        # GS T
+        T = 2
+        P1 = 0.1
+        P2 = 0.5
+        P3 = 1.0
+
+        prevZ = self.currentZ - 1
+        
+        m = len(self.uncoveredBlueEdges)
+        res = 0
+        for idx in range(m):
+            y = self.uncoveredBlueEdges[idx]
+            gsi = 0
+            if y <= T:
+                gsi = P1/m
+            elif y == np.Inf:
+                gsi = P3/m
+            elif (y > T):
+                gsi = P2/m
+            self.gsEachBlueEdges[idx] = gsi
+            res += gsi
+        
+        return res
+
+
+        
 
     ### LAYER
 
@@ -370,48 +510,33 @@ class State():
         self.currentLayerSil = np.zeros(self.sil[0].shape, dtype=bool)
         self.currentZ += 1
 
-        # clear old blue Edges
+        # LOG
+        # print('blue edges: ', self.blueEdges)
+        # print('uncovered under layer {}'.format(self.currentZ), self.uncoveredBlueEdges)
+
+        # new blueEdge
         self.blueEdges[self.currentZ] = []
-        delLayer = self.currentZ - 1
+
+        prevLayer = self.currentZ - 1
+        prevLayerBlueEdges = []
+        if prevLayer in self.blueEdges:
+            prevLayerBlueEdges = self.blueEdges[prevLayer] # pass previous layer to uncovered calculation
+        
+        delLayer = self.currentZ - 2
         if delLayer in self.blueEdges:
-            self.uncoveredBlueEdges = self.blueEdges.pop(delLayer) # pass previous layer to uncovered calculation
-
-        # update red edge
-        nOld, _ = self.redEdges.shape
-        nNew = len(self.newRedEdges)
-        oldRedEdges = self.redEdges
-
-        # recalculate red edge
-        self.redEdges = np.full((nOld+nNew, nOld+nNew), np.Inf, dtype=float)
-        self.redEdges[0:nOld, 0:nOld] = oldRedEdges
-        # self.redEdgesLabel += self.newRedEdges.keys()
-        keyno = nOld
-        for v in self.newRedEdges:
-            self.redEdgesLabel[v] = keyno
-            keyno += 1
-
-        for coord, vList in self.newRedEdges.items():
-            for v in vList:
-                coord2 = v[0]
-                dist = v[1]
-                
-                # idx = self.redEdgesLabel.index(coord)
-                # idx2 = self.redEdgesLabel.index(coord2)
-                idx = self.redEdgesLabel[coord]
-                idx2 = self.redEdgesLabel[coord2]
-
-                self.redEdges[idx][idx2] = dist
-                self.redEdges[idx2][idx] = dist
-
+            del self.blueEdges[delLayer]
         
+        # print( "blue edge of z = {}".format(self.currentZ))
+        # print( self.blueEdges)
+
         tim_stopMove = timeit.default_timer()
-        self.calNewShortestPath()
+        # self.uncoveredBlueEdges = dict()
+        self.AssignPrevLayerUncoveredBlueEdges(prevLayerBlueEdges, prevLayer)
+        self.GS += self.CalNewLayerGS()
         tim_stopPath = timeit.default_timer()
-        
-        self.newRedEdges = dict()
 
-        print("move and other: ", tim_stopMove-tim_start)
-        print("cal shortest path", tim_stopPath-tim_stopMove)
+        # print("timer move and other: ", tim_stopMove-tim_start)
+        # print("timer cal REDIST", tim_stopPath-tim_stopMove)
 
     def MoveNextAvailLayer(self):
 

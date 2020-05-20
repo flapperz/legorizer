@@ -29,9 +29,10 @@ VOX_OUT_PATH = './legorized.vox'
 def GetBrickList():
     # TODO LOAD BRICK
     originalBrickList = [(1,1), (1,2), (1,3), (2,2), (2,4), (2,6), (2,3), (2,8)]
+    originalBrickList = [(1,1), (1,2), (1,3)]
     brickList = [ Brick(x[0],x[1]) for x in originalBrickList ] + [ Brick(x[1],x[0]) for x in originalBrickList ]
 
-    return sorted( brickList, key=lambda b: b.area, reverse=True )
+    return sorted( list( set( brickList )), key=lambda b: b.area, reverse=True )
 
 def Solve(sil, brickList):
 
@@ -45,14 +46,16 @@ def Solve(sil, brickList):
         current = heappop(OPEN)[1]
 
         # maintain uniqueness at level 1 only
-        if (current.currentZ == 0):
-            CLOSED.add(current)
+        # if (current.currentZ == 0):
+        CLOSED.add(current)
 
         states = current.GetNextStates()
         # print('consider at layer {}'.format(current.currentZ), current)
-        print('layer: {}, size heap: {}'.format(current.currentZ, len(OPEN)))
+        print('layer: {}, size heap: {}, gs: {}'.format(current.currentZ, len(OPEN), current.GS))
+        print(current)
+        # current.PrintSchematic()
         for state in states:
-            if current.currentZ == 0 and state in CLOSED:
+            if state in CLOSED:
                 continue
 
             if state.IsFinish():
@@ -88,6 +91,13 @@ if __name__ == '__main__':
     #         [[127, 127, 127], [127, 127, 127], [127, 127, 127]]
     #     ]
     # )
+    voxs = np.array( 
+        [
+            [[127, 127, 127], [127, 127, 127], [127, 127, 127]],
+            [[127, 127, 127], [127, 127, 127], [127, 127, 127]],
+            [[127, 127, 127], [127, 127, 127], [127, 127, 127]]
+        ]
+    )
     sil = voxs != 255
     # sil = np.zeros((5,5,5),dtype=bool)
     # sil[0,1:4,1:4] = True
