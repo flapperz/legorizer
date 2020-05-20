@@ -2,6 +2,7 @@ import numpy as np
 from copy import deepcopy
 from _brick import *
 
+import timeit
 from random import random
 
 
@@ -74,20 +75,17 @@ Red Edges
             .
     }
 
-Red Edges Redesign
-------------------
-
 Blue Edges
 ----------
 
-    list of list of tuple 
+    dict of list of tuple 
     idx - z
-    [
+    {
     idx:0 -> [((2,3),(3,4)), ((1,1),(2,3))]
     idx:1 -> [((1,1),(1,3)), ((x1,y1),(x2,y2))]  
         .
         .
-    ]
+    }
 
 '''
 
@@ -104,10 +102,11 @@ class State():
         # field
         self.nodes = dict()
         self.redEdges = np.zeros((0,0), dtype=float)
-        self.redEdgesLabel = []
+        self.redEdgesLabel = dict()
         self.newRedEdges = dict()
 
-        self.blueEdges = [[]]
+        self.blueEdges = { 0: [] }
+        self.uncoveredBlueEdges = []
 
         self.dimZ = sil.shape[0]
 
@@ -240,21 +239,28 @@ class State():
                         py += 0.5
 
                     isValid, checkBlueEdges, checkRedEdges = self.CheckNewBrick(px,py,brick)
+
                     if isValid:
                         newState = self.copy()
                         newState.AddBrickNoCheck(px,py,brick)
                         
                         # update blue and red edges
-                        newState.blueEdges += checkBlueEdges
+                        newState.blueEdges[z] += checkBlueEdges
                         newState.newRedEdges[(px,py,z)] = []
                         newState.AddNewRedEdges(checkRedEdges)
+                        # newState.addGS((px,py,z), brick)
 
                         nextStates.append(newState)
                         break
 
         return nextStates
 
+    def addGS(self, coordG, brick):
+        pass
+
     def CalHeuristic(self):
+        
+        
         return 1/(self.currentZ * 400 + np.sum(self.currentLayerSil) + random() ) #TODO
 
     ### EDGE
@@ -263,17 +269,21 @@ class State():
         V, _ = self.redEdges.shape
         for k in range(V):
             for i in range(V):
-                for j in range(V): 
+                distki = self.redEdges[k][i] if (k<i) else self.redEdges[i][k] 
+                if (k==i or distki==np.Inf):
+                    continue
+                for j in range(i+1, V): 
+                    distkj = self.redEdges[k][j] if (k<j) else self.redEdges[j][k] 
+                    if (k==j or i==j or distkj==np.Inf):
+                        continue
                     self.redEdges[i][j] = min(self.redEdges[i][j],
-                                            self.redEdges[i][k], self.redEdges[k][j])
-        print(self.redEdges) #TODO delete
-        print(self.redEdgesLabel)
+                                            distki + distkj)
 
     def AddNewRedEdges(self, checkRedEdges):
         ''' add checkRedEdges from checkNewBrick '''
-        for (coord1, coord2) in checkRedEdges:
-            if coord1 not in self.newRedEdges:
-                self.newRedEdges[coord1] = []
+        for coord1, coord2 in checkRedEdges:
+            # if coord1 not in self.newRedEdges:
+            #     self.newRedEdges[coord1] = []
             self.newRedEdges[coord1].append((coord2, Dist(coord1, coord2)))
 
     ### NODE
@@ -355,10 +365,16 @@ class State():
         return np.sum( np.bitwise_xor(self.currentLayerSil, self.sil[self.currentZ] ) ) == 0
 
     def _MoveNextLayer(self):
+        tim_start = timeit.default_timer()
+
         self.currentLayerSil = np.zeros(self.sil[0].shape, dtype=bool)
         self.currentZ += 1
 
-        self.blueEdges.append([])
+        # clear old blue Edges
+        self.blueEdges[self.currentZ] = []
+        delLayer = self.currentZ - 1
+        if delLayer in self.blueEdges:
+            self.uncoveredBlueEdges = self.blueEdges.pop(delLayer) # pass previous layer to uncovered calculation
 
         # update red edge
         nOld, _ = self.redEdges.shape
@@ -366,23 +382,36 @@ class State():
         oldRedEdges = self.redEdges
 
         # recalculate red edge
-        self.redEdges = np.full((nOld+nNew, nOld+nNew), 9999, dtype=float)
+        self.redEdges = np.full((nOld+nNew, nOld+nNew), np.Inf, dtype=float)
         self.redEdges[0:nOld, 0:nOld] = oldRedEdges
-        self.redEdgesLabel += self.newRedEdges.keys()
+        # self.redEdgesLabel += self.newRedEdges.keys()
+        keyno = nOld
+        for v in self.newRedEdges:
+            self.redEdgesLabel[v] = keyno
+            keyno += 1
+
         for coord, vList in self.newRedEdges.items():
             for v in vList:
                 coord2 = v[0]
                 dist = v[1]
                 
-                idx = self.redEdgesLabel.index(coord)
-                idx2 = self.redEdgesLabel.index(coord2)
+                # idx = self.redEdgesLabel.index(coord)
+                # idx2 = self.redEdgesLabel.index(coord2)
+                idx = self.redEdgesLabel[coord]
+                idx2 = self.redEdgesLabel[coord2]
 
-                self.redEdges[idx, idx2] = dist
-                self.redEdges[idx2, idx] = dist
+                self.redEdges[idx][idx2] = dist
+                self.redEdges[idx2][idx] = dist
 
+        
+        tim_stopMove = timeit.default_timer()
+        self.calNewShortestPath()
+        tim_stopPath = timeit.default_timer()
+        
         self.newRedEdges = dict()
 
-        self.calNewShortestPath()
+        print("move and other: ", tim_stopMove-tim_start)
+        print("cal shortest path", tim_stopPath-tim_stopMove)
 
     def MoveNextAvailLayer(self):
 

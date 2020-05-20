@@ -68,7 +68,12 @@ def Solve(sil, brickList):
     soln = np.zeros((dimz, dimy, dimx), dtype=int)
     return soln
 
-    
+def printNodes(state):
+        nodes = state.nodes
+        for k in nodes:
+            for j in nodes[k]:
+                for i in nodes[k][j]:
+                    print("{} {} {} = {}".format(i,j,k,nodes[k][j][i]))
 
 if __name__ == '__main__':
 
@@ -76,13 +81,13 @@ if __name__ == '__main__':
 
     voxs = ReadVoxs( VOX_IN_PATH )
     # testVoxs
-    voxs = np.array( 
-        [
-            [[127, 127, 127], [255,127,255], [127,127,255]],
-            [[0,0,0], [0,127,0], [0,0,0]],
-            [[127, 127, 127], [127, 127, 127], [127, 127, 127]]
-        ]
-    )
+    # voxs = np.array( 
+    #     [
+    #         [[127, 127, 127], [255,127,255], [127,127,255]],
+    #         [[255,255,255], [255,127,255], [255,255,255]],
+    #         [[127, 127, 127], [127, 127, 127], [127, 127, 127]]
+    #     ]
+    # )
     sil = voxs != 255
     # sil = np.zeros((5,5,5),dtype=bool)
     # sil[0,1:4,1:4] = True

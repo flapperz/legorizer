@@ -4,10 +4,13 @@ class Brick():
         self.h = h
         self.area = w*h
 
-    def __str__(self):
-        return "wide = {}, height = {}, area = {}".format(self.w, self.h, self.area)
+    # def __str__(self):
+    #     return "wide = {}, height = {}, area = {}".format(self.w, self.h, self.area)
 
     def __repr__(self):
+        return "Brick {}x{}".format(self.w, self.h)
+    
+    def __str__(self):
         return "Brick {}x{}".format(self.w, self.h)
     
     def __eq__(self, other):

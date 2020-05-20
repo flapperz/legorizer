@@ -1,6 +1,7 @@
 import numpy as np 
 from random import randint
 
+
 def ReadVoxs( path ):
     
     with open(path, 'rb') as voxfile:
