@@ -102,6 +102,7 @@ class State():
         
         # field
         self.nodes = dict()
+        self.brickNumber = 0
 
         self.blueEdges = { 0: [] }
         self.uncoveredBlueEdges = dict()
@@ -127,6 +128,8 @@ class State():
 
         s.maxBrick = self.maxBrick
         s.minBrick = self.minBrick
+
+        s.brickNumber = self.brickNumber
 
         s.nodes = deepcopy(self.nodes)
         s.blueEdges = deepcopy(self.blueEdges)
@@ -200,47 +203,47 @@ class State():
         HORPIPE = u'\u2550'
         printTable = [[" " for i in range(dimx)] for j in range(dimy)]
 
-        res = 'current layer: {}\n'.format(self.currentZ)
+        res = 'current layer: {} brick number: {}\n'.format(self.currentZ, self.brickNumber)
 
-        if z == self.dimZ:
-            z -= 1
+        # if z == self.dimZ:
+        #     z -= 1
 
-        if z not in self.nodes:
-            res += 'empty'
-            return res
+        # if z not in self.nodes:
+        #     res += 'empty'
+        #     return res
 
-        for j in self.nodes[z]:
-            for i in self.nodes[z][j]:
-                brick = nodes[z][j][i]
-                beginx, endx, beginy, endy = brick.GetBoundary(i,j)
-                printTable[beginy][beginx]  = '#'
-                printTable[endy-1][beginx]  = '#'
-                printTable[beginy][endx-1]  = '#'
-                printTable[endy-1][endx-1]  = '#'
+        # for j in self.nodes[z]:
+        #     for i in self.nodes[z][j]:
+        #         brick = nodes[z][j][i]
+        #         beginx, endx, beginy, endy = brick.GetBoundary(i,j)
+        #         printTable[beginy][beginx]  = '#'
+        #         printTable[endy-1][beginx]  = '#'
+        #         printTable[beginy][endx-1]  = '#'
+        #         printTable[endy-1][endx-1]  = '#'
                 
-                if brick.w == 1:
-                    printTable[beginy][beginx] = 'u'
-                    printTable[endy-1][beginx] = 'n'
-                if brick.h == 1:
-                    printTable[beginy][beginx] = '('
-                    printTable[beginy][endx-1] = ')'
-                if brick.h == 1 and brick.w == 1:
-                    printTable[beginy][beginx] = '#'
+        #         if brick.w == 1:
+        #             printTable[beginy][beginx] = 'u'
+        #             printTable[endy-1][beginx] = 'n'
+        #         if brick.h == 1:
+        #             printTable[beginy][beginx] = '('
+        #             printTable[beginy][endx-1] = ')'
+        #         if brick.h == 1 and brick.w == 1:
+        #             printTable[beginy][beginx] = '#'
 
-                for ix in range(beginx+1, endx-1):
-                    printTable[beginy][ix] = HORPIPE
-                    printTable[endy-1][ix] = HORPIPE
-                for jx in range(beginy+1, endy-1):
-                    printTable[jx][beginx] = VERPIPE
-                    printTable[jx][endx-1] = VERPIPE
+        #         for ix in range(beginx+1, endx-1):
+        #             printTable[beginy][ix] = HORPIPE
+        #             printTable[endy-1][ix] = HORPIPE
+        #         for jx in range(beginy+1, endy-1):
+        #             printTable[jx][beginx] = VERPIPE
+        #             printTable[jx][endx-1] = VERPIPE
 
         
-        res += '-'*2*dimx + '\n'
-        for j in range(len(printTable)-1,-1,-1):
-            res += '|'
-            for e in printTable[j]:
-                res += e + '|'
-            res += '\n' + '-'*2*dimx + '\n'
+        # res += '-'*2*dimx + '\n'
+        # for j in range(len(printTable)-1,-1,-1):
+        #     res += '|'
+        #     for e in printTable[j]:
+        #         res += e + '|'
+        #     res += '\n' + '-'*2*dimx + '\n'
 
         return res
 
@@ -254,11 +257,12 @@ class State():
         print("schematic till present")
         
         for z in range(maxz+1):
+            
             printTable = [[" " for i in range(dimx)] for j in range(dimy)]
             res = 'layer: {}\n'.format(z)
 
             if z == self.dimZ:
-                z -= 1
+                continue
 
             if z not in self.nodes:
                 res += 'empty'
@@ -297,7 +301,7 @@ class State():
                     res += e + '|'
                 res += '\n' + '-'*2*dimx + '\n'
             print(res)
-        print("################")
+        print("#####################")
 
     def IsFinish(self):
         return self.currentZ == self.dimZ
@@ -420,6 +424,7 @@ class State():
     def AddBrickNoCheck(self, x, y, brick):
         ''' O( IsNewBrickValid) '''
         z = self.currentZ
+        self.brickNumber += 1
         self._SetNode(x,y,z, brick)
         # self.currentLayerGH = self.CalNewBrickGH()
         # self.GA += brick.area/self.slotno
@@ -515,6 +520,7 @@ class State():
 
     def CalHeuristic(self):
         
+
         return self.GS - self.currentZ
         # return self.GS + self.GH + self.currentLayerGH
         return self.GS + self.GH + self.currentLayerGH - self.GA
@@ -574,7 +580,7 @@ class State():
         # self.uncoveredBlueEdges = dict()
         self.AssignPrevLayerUncoveredBlueEdges(prevLayerBlueEdges, prevLayer)
         self.GS += self.CalNewLayerGS()
-        self.GH += self.currentLayerGH
+        # self.GH += self.currentLayerGH
         self.currentLayerGH = 0
 
     def MoveNextAvailLayer(self):

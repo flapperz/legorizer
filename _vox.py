@@ -37,7 +37,8 @@ def WriteFile(path, voxs, palette):
                 for k in range(dimz-1, -1, -1):
                     outfile.write( int( voxs[k][j][i] ).to_bytes(length=1, byteorder='little') )
 
-        for col in palette:
+        for colidx in range(len(palette)):
+            col = palette[colidx]
             for val in col:
                 outfile.write( int(val).to_bytes(length=1, byteorder='little') )
 
@@ -56,13 +57,18 @@ def SaveVoxs( path, splitpath, shape, nodes, palette ):
                 usedColor = []
                 for j2 in nodes[k]:
                     for i2 in nodes[k][j2]: 
+                        if i==i2 and j==j2:
+                            continue
                         coord2 = (i2,j2)
+                        # bug may be come from color pallete
                         if CheckBrickTouch(nodes[k][j2][i2], i2, j2, nodes[k][j][i], i, j) and (coord2 in color):
                             usedColor.append(color[coord2])
 
                 for col in range(255):
                     if col not in usedColor:
                         color[coord1] = col
+                        break
+                    
 
                 brick = nodes[k][j][i]
                 pal = color[coord1]
@@ -88,7 +94,7 @@ def CreatePalette():
     # palette[127][:] = (255, 255, 255)
     for i in range(255):
         palette[i][:] = (randint(0,255),randint(0,255),randint(0,255))
-    palette[0][:] = (0,0,0)
+    palette[0][:] = (255,255,255)
     palette[1][:] = (255,0,0)
     palette[2][:] = (0,255,0)
     palette[3][:] = (0,0,255)
